@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from tortoise import Tortoise
+from app.models.contract import Contract
 
 router = APIRouter()
 
@@ -7,8 +7,7 @@ router = APIRouter()
 @router.get("/health")
 async def health_check():
     try:
-        conn = Tortoise.get_connection("default")
-        await conn.execute_query("SELECT 1")
+        await Contract.all().count()
         db_ok = True
     except Exception:
         db_ok = False

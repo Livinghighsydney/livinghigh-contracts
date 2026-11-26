@@ -5,6 +5,7 @@ class WebhookPayload(BaseModel):
     model_config = {"extra": "allow"}
 
     envelopeId: str | None = None
+    externalId: str | None = None
     status: str | None = None
 
 

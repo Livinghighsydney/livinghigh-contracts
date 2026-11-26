@@ -1,7 +1,7 @@
 from decimal import Decimal
 from datetime import date, datetime
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class CreateContractRequest(BaseModel):
@@ -22,6 +22,12 @@ class CreateContractRequest(BaseModel):
         if v <= 0:
             raise ValueError("must be positive")
         return v
+
+
+class SendContractRequest(BaseModel):
+    """Optional email text, like PandaDoc's send dialog. Empty = Documenso's default email."""
+    email_subject: str | None = Field(default=None, max_length=255)
+    email_message: str | None = Field(default=None, max_length=2000)
 
 
 class ContractSummary(BaseModel):

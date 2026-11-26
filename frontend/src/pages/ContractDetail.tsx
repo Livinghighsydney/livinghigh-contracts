@@ -10,6 +10,24 @@ export function ContractDetail() {
   const { contract: c, loading, error } = useContract(id!);
   const [sending, setSending]   = useState(false);
   const [sendErr, setSendErr]   = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
+  const [resendMsg, setResendMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const handleResend = async () => {
+    setResending(true);
+    setResendMsg(null);
+    try {
+      const { sent } = await contractsApi.resendEmail(id!);
+      setResendMsg({
+        ok: true,
+        text: sent === "completed_copy" ? "Signed copy emailed to the tenant." : "Signing link emailed to the tenant again.",
+      });
+    } catch (e: unknown) {
+      setResendMsg({ ok: false, text: e instanceof Error ? e.message : "Could not send the email" });
+    } finally {
+      setResending(false);
+    }
+  };
 
   const handleSend = async () => {
     setSending(true);
@@ -53,6 +71,24 @@ export function ContractDetail() {
       </div>
 
       {sendErr && <p className="mt-4 text-sm text-red-600">{sendErr}</p>}
+
+      {["sent", "viewed", "completed", "archived"].includes(c.status) && (
+        <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4">
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-gray-600">
+              {c.status === "sent" || c.status === "viewed"
+                ? "Tenant hasn't signed yet. Email them the signing link again?"
+                : "Email the signed copy to the tenant again?"}
+            </p>
+            <Button variant="secondary" onClick={handleResend} loading={resending} className="shrink-0">
+              Resend email
+            </Button>
+          </div>
+          {resendMsg && (
+            <p className={`mt-2 text-sm ${resendMsg.ok ? "text-green-700" : "text-red-600"}`}>{resendMsg.text}</p>
+          )}
+        </div>
+      )}
 
       {c.status === "draft" && (
         <Button onClick={handleSend} loading={sending} className="mt-6 w-full">
