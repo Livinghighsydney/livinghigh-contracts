@@ -9,6 +9,7 @@ MODELS = [
     "app.models.file",
     "app.models.template",
     "app.models.user",
+    "app.models.setting",
     "aerich.models",
 ]
 

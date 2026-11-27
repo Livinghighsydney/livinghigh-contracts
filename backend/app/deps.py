@@ -2,7 +2,7 @@
 from fastapi import Depends, HTTPException, Request, Response
 
 from app.config import settings
-from app.models.user import User
+from app.models.user import Role, User
 from app.services import auth_service
 
 COOKIE = "lh_session"
@@ -39,4 +39,10 @@ async def team_manager(user: User = Depends(current_user)) -> User:
 async def template_manager(user: User = Depends(current_user)) -> User:
     if not auth_service.can_manage_templates(user):
         raise HTTPException(status_code=403, detail="Only Admins and Managers can change templates.")
+    return user
+
+
+async def admin_only(user: User = Depends(current_user)) -> User:
+    if user.role != Role.ADMIN:
+        raise HTTPException(status_code=403, detail="Only Admins can change these settings.")
     return user

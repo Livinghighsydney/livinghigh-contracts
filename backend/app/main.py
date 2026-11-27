@@ -6,7 +6,7 @@ from tortoise import Tortoise
 from tortoise.contrib.fastapi import RegisterTortoise
 
 from app.database import TORTOISE_ORM
-from app.services import contract_service
+from app.services import contract_service, settings_service
 from app.config import settings
 from app.controllers import health, contracts, webhooks, templates, auth, team, live as live_ctrl, settings as settings_ctrl
 
@@ -44,6 +44,7 @@ async def run_migrations() -> None:
 async def lifespan(app: FastAPI):
     async with RegisterTortoise(app, config=TORTOISE_ORM):
         await run_migrations()
+        await settings_service.load()  # email sender name / reply-to saved on the Settings page
         # Sends contracts that were queued because Documenso rate-limited us.
         worker = asyncio.create_task(contract_service.send_queue_loop())
         # One-time catch-up for anything that happened in Documenso while the backend was off.

@@ -14,6 +14,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 
 from app.config import settings
+from app.services import settings_service
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ def _first_name(name: str) -> str:
 
 def _layout(heading: str, body_html: str) -> str:
     """Simple, email-client-safe HTML wrapper (inline styles, table layout)."""
-    brand = html.escape(settings.email_from_name)
+    brand = html.escape(settings_service.sender_name())
     return f"""<!doctype html>
 <html><body style="margin:0;padding:0;background:#f4f5f7;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:24px 0;">
@@ -69,10 +70,10 @@ def _paragraphs(text: str) -> str:
 
 def _new_message(to_email: str, to_name: str, subject: str) -> EmailMessage:
     msg = EmailMessage()
-    msg["From"] = formataddr((settings.email_from_name, settings.email_from))
+    msg["From"] = formataddr((settings_service.sender_name(), settings.email_from))
     msg["To"] = formataddr((to_name, to_email))
     msg["Subject"] = subject
-    msg["Reply-To"] = settings.email_reply_to or settings.email_from
+    msg["Reply-To"] = settings_service.reply_to()
     msg["Message-ID"] = make_msgid(domain=settings.email_from.split("@")[-1])
     return msg
 
@@ -134,7 +135,7 @@ async def send_signing_request(
     msg = _new_message(to_email, to_name, subject)
     msg.set_content(
         f"{intro}\n\nReview and sign here:\n{signing_url}\n\n"
-        f"This link is personal to you. Please don't forward it.\n\n— {settings.email_from_name}"
+        f"This link is personal to you. Please don't forward it.\n\n— {settings_service.sender_name()}"
     )
     button = (
         f'<p style="margin:24px 0;"><a href="{html.escape(signing_url, quote=True)}" '
@@ -161,7 +162,7 @@ async def send_completed_copy(
         "Thanks for signing. Your signed Living High agreement is attached for your records, "
         f"including the signing certificate.\n\nPlease keep this copy somewhere safe."
     )
-    msg.set_content(f"{text}\n\n— {settings.email_from_name}")
+    msg.set_content(f"{text}\n\n— {settings_service.sender_name()}")
     msg.add_alternative(_layout("Your signed agreement", _paragraphs(text)), subtype="html")
     msg.add_attachment(signed_pdf, maintype="application", subtype="pdf", filename=filename)
     await _send(msg)
@@ -175,7 +176,7 @@ async def send_team_invite(*, to_email: str, inviter_name: str, role_label: str,
         f"Hi,\n\n{inviter_name} has invited you to join the Living High contracts workspace "
         f"as a {role_label}.\n\nAccept the invite to set your password. The link works for {days} days."
     )
-    msg.set_content(f"{text}\n\nAccept the invite:\n{link}\n\n— {settings.email_from_name}")
+    msg.set_content(f"{text}\n\nAccept the invite:\n{link}\n\n— {settings_service.sender_name()}")
     button = (
         f'<p style="margin:24px 0;"><a href="{html.escape(link, quote=True)}" '
         f'style="background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 24px;'

@@ -64,6 +64,14 @@ export function createCache<T>(load: () => Promise<T>, initial: T, maxAgeMs = 30
       return data;
     },
     refresh,
+    /** Put fresh data from a server reply straight in (saves a reload request). */
+    set(value: T) {
+      data = value;
+      loaded = true;
+      error = "";
+      attemptAt = Date.now();
+      changed();
+    },
     /** Forget everything (e.g. after sign-out) so the next user starts clean. */
     reset() {
       data = initial;

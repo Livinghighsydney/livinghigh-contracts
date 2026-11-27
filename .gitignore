@@ -55,3 +55,6 @@ docs/agreements/Lodgers Agreement - Fresh Rooms bank details.pdf
 
 # Client agreement PDFs (contain bank details) — keep local only
 docs/agreements/
+
+# Staff walkthrough PDF (contains the super admin password) — share privately, never commit
+docs/walkthrough/

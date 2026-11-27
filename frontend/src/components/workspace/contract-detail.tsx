@@ -243,7 +243,9 @@ export function ContractDetail({ id }: { id: string }) {
                       ? FileText
                       : event.type === "completed"
                         ? Check
-                        : Mail;
+                        : event.type === "cancelled"
+                          ? XCircle
+                          : Mail;
               return (
                 <div className="timeline-item" key={`${event.type}-${i}`}>
                   <span className="timeline-icon">
@@ -256,7 +258,8 @@ export function ContractDetail({ id }: { id: string }) {
                 </div>
               );
             })}
-            {c.status === "cancelled" && (
+            {/* Older contracts may have no "cancelled" event — show it from the status then (never twice). */}
+            {c.status === "cancelled" && !contractApi.events(id).some((e) => e.type === "cancelled") && (
               <div className="timeline-item">
                 <span className="timeline-icon">
                   <XCircle />

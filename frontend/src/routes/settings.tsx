@@ -3,14 +3,14 @@ import { PageHeader, metadata } from "@/components/workspace/common";
 import { settingsApi } from "@/api/settings";
 import { templateApi } from "@/api/templates";
 import { useResourceVersion } from "@/api/store";
-import { Mail, LockKeyhole, UserRound, LoaderCircle } from "lucide-react";
+import { Mail, LockKeyhole, UserRound, LoaderCircle, Pencil, Check } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { authApi, ROLE_LABEL } from "@/api/auth";
 import { toast } from "sonner";
 export const Route = createFileRoute("/settings")({
   head: () =>
-    metadata("Settings", "View Living High email sender details and active agreement templates."),
+    metadata("Settings", "Living High email sender details and active agreement templates."),
   component: Settings,
 });
 function Settings() {
@@ -29,21 +29,12 @@ function Settings() {
           <Mail size={17} />
           Sender details
         </h2>
+        <EmailSettings />
         {[
           {
-            title: "Sender name",
-            description: "The name tenants see in their inbox.",
-            value: settings.sender_name,
-          },
-          {
             title: "Sender email",
-            description: "Agreement emails are sent from this address.",
+            description: "Agreement emails are sent from this address (must be on livinghigh.com.au).",
             value: settings.sender_email,
-          },
-          {
-            title: "Reply-to email",
-            description: "Tenant replies go to this address.",
-            value: settings.reply_to,
           },
           {
             title: "Active templates",
@@ -59,12 +50,135 @@ function Settings() {
             <div className="text-sm font-medium break-all">{item.value}</div>
           </div>
         ))}
-        <p className="text-[11px] text-muted-foreground mt-6 flex gap-2">
-          <LockKeyhole size={13} />
-          These settings are read-only for now.
-        </p>
+        {!settings.can_edit && (
+          <p className="text-[11px] text-muted-foreground mt-6 flex gap-2">
+            <LockKeyhole size={13} />
+            Only Admins can change the sender details.
+          </p>
+        )}
       </div>
     </main>
+  );
+}
+
+/** Sender name + reply-to: locked rows; Admins click Edit, change it, then Save (one request). */
+function EmailSettings() {
+  useResourceVersion();
+  const settings = settingsApi.get();
+  const replyShown = settings.reply_to === settings.sender_email ? "" : settings.reply_to;
+  return (
+    <>
+      <LockedSetting
+        title="Sender name"
+        description="The name tenants see in their inbox, e.g. “Living High”."
+        value={settings.sender_name}
+        canEdit={settings.can_edit}
+        maxLength={100}
+        check={(v) => (!v ? "Enter a sender name." : /[<>"]/.test(v) ? "Don’t use < > or quotes." : "")}
+        save={(v) => settingsApi.updateEmail({ sender_name: v })}
+      />
+      <LockedSetting
+        title="Reply-to email"
+        description={`Tenant replies go here. Leave empty to use the sender email (${settings.sender_email}).`}
+        value={replyShown}
+        display={settings.reply_to}
+        canEdit={settings.can_edit}
+        type="email"
+        placeholder="e.g. hello@livinghigh.com.au"
+        check={(v) => (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? "Enter a valid email, or leave it empty." : "")}
+        save={(v) => settingsApi.updateEmail({ reply_to: v })}
+      />
+    </>
+  );
+}
+
+/** One setting: shown locked with an Edit button; in edit mode an input with Save / Cancel. */
+function LockedSetting(props: {
+  title: string;
+  description: string;
+  value: string;
+  display?: string;
+  canEdit: boolean;
+  type?: string;
+  placeholder?: string;
+  maxLength?: number;
+  check: (value: string) => string;
+  save: (value: string) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<string | null>(null); // null = locked
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const editing = draft !== null;
+  const cancel = () => {
+    setDraft(null);
+    setError("");
+  };
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (draft === null || busy) return;
+    const v = draft.trim();
+    const problem = props.check(v);
+    if (problem) return setError(problem);
+    if (v === props.value) return cancel(); // nothing changed — no request
+    setBusy(true);
+    try {
+      await props.save(v);
+      cancel();
+      toast.success(`${props.title} saved. New emails will use it.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Couldn’t save the ${props.title.toLowerCase()}. Try again.`);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="settings-row">
+      <div>
+        <h3>{props.title}</h3>
+        <p>{props.description}</p>
+      </div>
+      {editing ? (
+        <form className="flex w-full max-w-sm flex-col gap-2" onSubmit={(e) => void submit(e)}>
+          <label className="field">
+            <span className="sr-only">{props.title}</span>
+            <input
+              autoFocus
+              type={props.type ?? "text"}
+              value={draft}
+              placeholder={props.placeholder}
+              maxLength={props.maxLength}
+              aria-invalid={Boolean(error)}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                if (error) setError("");
+              }}
+              onKeyDown={(e) => e.key === "Escape" && cancel()}
+            />
+          </label>
+          {error && <p role="alert" className="field-error">{error}</p>}
+          <div className="flex gap-2">
+            <Button size="sm" disabled={busy}>
+              {busy ? <LoaderCircle className="animate-spin" /> : <Check />}
+              Save
+            </Button>
+            <Button size="sm" type="button" variant="ghost" disabled={busy} onClick={cancel}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <div className="flex items-center gap-3">
+          <LockKeyhole size={13} className="text-muted-foreground shrink-0" aria-label="Locked" />
+          <span className="text-sm font-medium break-all">{props.display ?? props.value}</span>
+          {props.canEdit && (
+            <Button size="sm" variant="outline" onClick={() => setDraft(props.value)}>
+              <Pencil />
+              Edit
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
