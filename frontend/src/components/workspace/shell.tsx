@@ -14,6 +14,7 @@ import {
   Building2,
   LoaderCircle,
   UsersRound,
+  ChevronLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +36,17 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const path = useLocation().pathname;
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  // Desktop: the side panel can be hidden with the ‹ button (remembered on this computer).
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    setCollapsed(window.localStorage.getItem("lh_sidebar_collapsed") === "1");
+  }, []);
+  function toggleSidebar() {
+    setCollapsed((c) => {
+      window.localStorage.setItem("lh_sidebar_collapsed", c ? "0" : "1");
+      return !c;
+    });
+  }
   useResourceVersion();
   const hydrated = useHydrated();
   // Live updates over a WebSocket while someone is signed in (no polling).
@@ -75,7 +87,19 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
     void navigate({ to: "/login", replace: true });
   }
   return (
-    <div className="workspace">
+    <div
+      className={`workspace ${authApi.justSignedIn() ? "workspace-enter" : ""} ${collapsed ? "sidebar-collapsed" : ""}`}
+    >
+      <button
+        type="button"
+        className="sidebar-toggle"
+        onClick={() => toggleSidebar()}
+        aria-label={collapsed ? "Show navigation" : "Hide navigation"}
+        aria-expanded={!collapsed}
+        title={collapsed ? "Show menu" : "Hide menu"}
+      >
+        {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+      </button>
       {open && (
         <div className="fixed inset-0 bg-foreground/20 z-20" onClick={() => setOpen(false)} />
       )}

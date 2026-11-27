@@ -23,6 +23,8 @@ let status: Status = "unknown";
 let user: StaffUser | null = null;
 let loadError = "";
 let inflight: Promise<void> | null = null;
+// After the animated sign-in, the workspace plays its "enter" animation once.
+let enterUntil = 0;
 
 function setSignedOut() {
   user = null;
@@ -85,15 +87,33 @@ export const authApi = {
   canManageTemplates: () => user?.role === "admin" || user?.role === "manager",
   isAdmin: () => user?.role === "admin",
 
-  async signIn(email: string, password: string) {
+  /**
+   * Sign in. With `defer`, the session is created but the app keeps showing the sign-in page until
+   * the returned `finish()` is called (so the sign-in animation can play). Data starts loading now.
+   */
+  async signIn(
+    email: string,
+    password: string,
+    opts: { defer?: boolean } = {},
+  ): Promise<(() => void) & { ready: Promise<void> }> {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter a valid email address.");
     if (!password) throw new Error("Enter your password.");
-    user = await http.post<StaffUser>("/api/auth/login", { email: email.trim(), password });
-    status = "signed-in";
+    const signedIn = await http.post<StaffUser>("/api/auth/login", { email: email.trim(), password });
     contractApi.reset();
     templateApi.reset();
-    changed();
+    // Load the dashboard while the animation plays; `finish.ready` resolves when it's in.
+    const ready = Promise.allSettled([contractApi.refresh(), templateApi.refresh()]).then(() => undefined);
+    const finish = () => {
+      user = signedIn;
+      status = "signed-in";
+      if (opts.defer) enterUntil = Date.now() + 1500;
+      changed();
+    };
+    if (!opts.defer) finish();
+    return Object.assign(finish, { ready });
   },
+  /** True just after the animated sign-in — the workspace fades in once. */
+  justSignedIn: () => Date.now() < enterUntil,
   async signOut() {
     try {
       await http.post("/api/auth/logout");

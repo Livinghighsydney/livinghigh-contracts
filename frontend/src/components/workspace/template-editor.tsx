@@ -19,6 +19,7 @@ import {
   SquareCheck,
   CircleDot,
   ChevronDownSquare,
+  X,
 } from "lucide-react";
 import { FieldSettings, FilledBySwitch, boxText, optionProblem, settingsOf } from "./field-settings";
 import { Button } from "@/components/ui/button";
@@ -485,10 +486,28 @@ function TemplateEditorBody({ id }: { id: string }) {
                           }}
                         >
                           {!f.tickOnly && <GripVertical size={10} />}
-                          <span className="truncate">{boxText(f)}</span>
+                          <span className="truncate min-w-0">{boxText(f)}</span>
                           {!fromContract(f) && !f.tickOnly && f.type !== "SIGNATURE" && settingsOf(f).required !== false && (
                             <span className="text-destructive" aria-label="required">*</span>
                           )}
+                          <button
+                            type="button"
+                            className="field-delete"
+                            aria-label={`Delete ${f.label}`}
+                            title="Delete field"
+                            onPointerDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation(); // don't start dragging the field
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFields((fs) => fs.filter((x) => x.id !== f.id));
+                              setSelected("");
+                              setDirty(true);
+                            }}
+                          >
+                            <X />
+                          </button>
                           {selected === f.id && (
                             <span
                               role="button"

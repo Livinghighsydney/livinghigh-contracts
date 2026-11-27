@@ -46,13 +46,16 @@ async def lifespan(app: FastAPI):
         await run_migrations()
         await settings_service.load()  # email sender name / reply-to saved on the Settings page
         # Sends contracts that were queued because Documenso rate-limited us.
-        worker = asyncio.create_task(contract_service.send_queue_loop())
-        # One-time catch-up for anything that happened in Documenso while the backend was off.
-        asyncio.create_task(contract_service.catch_up_on_start())
+        worker = None
+        if settings.background_jobs:
+            worker = asyncio.create_task(contract_service.send_queue_loop())
+            # One-time catch-up for anything that happened in Documenso while the backend was off.
+            asyncio.create_task(contract_service.catch_up_on_start())
         try:
             yield
         finally:
-            worker.cancel()
+            if worker:
+                worker.cancel()
 
 
 app = FastAPI(title="Living High Contract API", version="1.0.0", lifespan=lifespan)

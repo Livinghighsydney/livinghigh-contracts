@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_password: str = ""
     resend_api_key: str = ""        # optional; with Resend the SMTP password is already the API key
+    # Send queue + start-up catch-up. Turn OFF for a local backend that shares the production DB.
+    background_jobs: bool = True
     email_from: str = ""            # e.g. contracts@livinghigh.com.au
     email_from_name: str = "Living High"
     email_reply_to: str = ""        # optional; defaults to email_from
