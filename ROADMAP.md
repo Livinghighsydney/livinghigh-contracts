@@ -130,9 +130,9 @@ Last updated: 2026-11-26
 - [ ] PDF normalisation
 
 ## Phase 11 — Deploy ⬜ **(ask: hosting choice)**
-- [ ] Backend host (e.g. Railway / Fly.io) and frontend host (e.g. Vercel / Netlify) — free/cheap tiers
-- [ ] All env vars set in hosting; HTTPS; production CORS
-- [ ] Documenso webhook URL → production backend (replace the temporary cloudflared tunnel)
+- [x] Backend on Railway, frontend on Vercel (2026-11-28) — see CLAUDE.md §12b
+- [x] All env vars set in hosting; HTTPS; production CORS (2026-11-28)
+- [x] Documenso webhook URL → production backend (2026-11-28). Live test: send → opened → Viewed in 0.8 s → cancelled
 - [ ] Scheduled jobs running (reconcile, reminders)
 
 ## Phase 12 — Docs & handover ⬜

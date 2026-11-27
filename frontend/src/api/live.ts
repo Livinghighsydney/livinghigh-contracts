@@ -1,4 +1,4 @@
-import { API_BASE } from "./http";
+import { API_BASE, http } from "./http";
 import { contractApi } from "./contracts";
 import { templateApi } from "./templates";
 
@@ -12,7 +12,16 @@ let retryMs = 1000;
 let retryTimer: number | undefined;
 let refreshTimer: number | undefined;
 
-const wsUrl = () => API_BASE.replace(/^http/, "ws") + "/api/live";
+// In production the API is reached through this site's own /api (forwarded to the backend),
+// but WebSockets can't be forwarded — VITE_LIVE_URL points straight at the backend.
+const liveBase = () =>
+  ((import.meta.env["VITE_LIVE_URL"] as string | undefined) || API_BASE || window.location.origin).replace(/\/$/, "");
+
+/** A one-time pass (fetched with the sign-in cookie) proves who we are to the WebSocket. */
+async function wsUrl() {
+  const { ticket } = await http.post<{ ticket: string }>("/api/live/ticket");
+  return `${liveBase().replace(/^http/, "ws")}/api/live?ticket=${encodeURIComponent(ticket)}`;
+}
 
 function refreshSoon() {
   // Several updates can arrive together (e.g. "signed" then "completed") — refresh once.
@@ -20,9 +29,27 @@ function refreshSoon() {
   refreshTimer = window.setTimeout(() => void contractApi.refresh(), 300);
 }
 
-function open() {
+let opening = false;
+
+function retryLater() {
+  retryTimer = window.setTimeout(() => void open(), retryMs);
+  retryMs = Math.min(retryMs * 2, 30_000);
+}
+
+async function open() {
+  if (!wanted || socket || opening) return;
+  opening = true;
+  let url: string;
+  try {
+    url = await wsUrl();
+  } catch {
+    opening = false;
+    if (wanted) retryLater(); // signed out → the 401 handler takes over; otherwise try again
+    return;
+  }
+  opening = false;
   if (!wanted || socket) return;
-  const ws = new WebSocket(wsUrl()); // the session cookie is sent with the handshake
+  const ws = new WebSocket(url);
   socket = ws;
   ws.onopen = () => {
     retryMs = 1000;
@@ -40,10 +67,9 @@ function open() {
   };
   ws.onclose = (e) => {
     socket = null;
-    if (!wanted || e.code === 4401 || e.code === 4403) return; // signed out / not allowed
-    // Reconnect with back-off (1s, 2s, 4s … max 30s).
-    retryTimer = window.setTimeout(open, retryMs);
-    retryMs = Math.min(retryMs * 2, 30_000);
+    if (!wanted || e.code === 4403) return; // page not allowed
+    // Reconnect with back-off (1s, 2s, 4s … max 30s), with a fresh pass each time.
+    retryLater();
   };
 }
 
@@ -51,7 +77,7 @@ export const liveUpdates = {
   start() {
     if (typeof window === "undefined") return;
     wanted = true;
-    open();
+    void open();
   },
   stop() {
     wanted = false;

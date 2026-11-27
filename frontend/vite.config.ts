@@ -9,7 +9,13 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+// Production (Vercel): /api/* is forwarded to the backend on Railway, so the browser only ever
+// talks to this site and the sign-in cookie stays first-party. Set BACKEND_URL in Vercel.
+const backend = process.env["BACKEND_URL"]?.replace(/\/$/, "");
+
 export default defineConfig({
+  // routeRules isn't in Lovable's type, but the nitro options are passed straight through to nitro.
+  ...(backend ? { nitro: { routeRules: { "/api/**": { proxy: `${backend}/api/**` } } } as { preset?: string } } : {}),
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this

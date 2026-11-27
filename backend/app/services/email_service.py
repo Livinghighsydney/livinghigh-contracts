@@ -1,4 +1,7 @@
-"""Tenant emails, sent from Living High's own mailbox over SMTP.
+"""Tenant emails, sent from Living High's own mailbox (Resend web API, or SMTP).
+
+Railway blocks outgoing SMTP, so when the mail provider is Resend we use Resend's HTTPS API with the
+same key (SMTP_PASSWORD / RESEND_API_KEY). Any other provider still goes over SMTP.
 
 Documenso is told not to email anyone (distributionMethod NONE). We send exactly two emails:
   1. signing request — contains the tenant's personal Documenso signing link
@@ -6,12 +9,15 @@ Documenso is told not to email anyone (distributionMethod NONE). We send exactly
 Never log email bodies or addresses (Australian Privacy Act).
 """
 import asyncio
+import base64
 import html
 import logging
 import smtplib
 import ssl
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
+
+import httpx
 
 from app.config import settings
 from app.services import settings_service
@@ -112,8 +118,55 @@ def _send_sync(msg: EmailMessage) -> None:
         raise EmailError(f"Could not send the email ({type(exc).__name__}). Please try again.") from exc
 
 
+def _resend_key() -> str:
+    """Resend API key when Resend is the provider (its SMTP password is the same API key)."""
+    if settings.resend_api_key:
+        return settings.resend_api_key
+    if "resend" in settings.smtp_host.lower() and settings.smtp_password.startswith("re_"):
+        return settings.smtp_password
+    return ""
+
+
+async def _send_resend(msg: EmailMessage, key: str) -> None:
+    text = msg.get_body(preferencelist=("plain",))
+    html_part = msg.get_body(preferencelist=("html",))
+    body: dict = {
+        "from": msg["From"],
+        "to": [msg["To"]],
+        "subject": msg["Subject"],
+        "text": text.get_content() if text else "",
+        "html": html_part.get_content() if html_part else None,
+    }
+    if msg["Reply-To"]:
+        body["reply_to"] = [msg["Reply-To"]]
+    attachments = [
+        {"filename": a.get_filename() or "attachment.pdf", "content": base64.b64encode(a.get_content()).decode()}
+        for a in msg.iter_attachments()
+    ]
+    if attachments:
+        body["attachments"] = attachments
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post("https://api.resend.com/emails", json={k: v for k, v in body.items() if v is not None},
+                                  headers={"Authorization": f"Bearer {key}"})
+    except httpx.HTTPError as exc:
+        logger.warning("Resend API unreachable: %s", type(exc).__name__)
+        raise EmailError(f"Could not send the email ({type(exc).__name__}). Please try again.") from exc
+    if r.status_code in (401, 403):
+        raise EmailError("Email login failed. Check the Resend API key (SMTP_PASSWORD).")
+    if r.status_code == 422:
+        raise EmailError("The email service refused the message. Check the tenant's email address is correct.")
+    if r.status_code >= 400:
+        logger.warning("Resend API error %s", r.status_code)
+        raise EmailError(f"Could not send the email (error {r.status_code}). Please try again.")
+
+
 async def _send(msg: EmailMessage) -> None:
-    await asyncio.to_thread(_send_sync, msg)
+    key = _resend_key()
+    if key:
+        await _send_resend(msg, key)
+    else:
+        await asyncio.to_thread(_send_sync, msg)
 
 
 async def send_signing_request(

@@ -1,6 +1,8 @@
 /** Talks to the Living High FastAPI backend. All resource modules go through here. */
+// Production: same origin — /api is forwarded to the backend (see vite.config.ts). Dev: local backend.
 export const API_BASE: string =
-  (import.meta.env["VITE_API_URL"] as string | undefined)?.replace(/\/$/, "") ?? "http://localhost:8000";
+  (import.meta.env["VITE_API_URL"] as string | undefined)?.replace(/\/$/, "") ??
+  (import.meta.env.PROD ? "" : "http://localhost:8000");
 
 /** Turn a FastAPI error body into one plain-English sentence. */
 function errorMessage(body: unknown, status: number): string {
