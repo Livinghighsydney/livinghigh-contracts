@@ -7,6 +7,7 @@ from tortoise.models import Model
 class FileKind(str, Enum):
     SIGNED_PDF = "signed_pdf"
     CERTIFICATE = "certificate"
+    AUDIT_LOG = "audit_log"  # Documenso's full Audit Log PDF (every event, IP, device)
 
 
 class ContractFile(Model):

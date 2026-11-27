@@ -30,7 +30,22 @@ class Settings(BaseSettings):
 
     # App
     app_base_url: str = "http://localhost:8000"
+    # Comma-separated browser origins allowed to call the API (staff frontend).
+    cors_origins: str = "http://localhost:5173,http://localhost:8080,http://localhost:3000"
     session_secret: str = "change-me-in-production"
+
+    # Staff login
+    frontend_url: str = "http://localhost:8080"   # used in invite links
+    session_days: int = 14
+    invite_days: int = 5                          # same as PandaDoc invite links
+    # Cookie: frontend and backend on different domains in production need SameSite=None + Secure.
+    cookie_secure: bool = False
+    cookie_samesite: str = "lax"                  # "lax" for localhost; "none" when cross-site in production
+
+    # seed.py — super admin (account owner). Password only from .env, never in code.
+    seed_admin_email: str = "contracts@livinghigh.com.au"
+    seed_admin_name: str = "Living High Admin"
+    seed_admin_password: str = ""
     debug: bool = False
 
 

@@ -1,5 +1,6 @@
 """Supabase Storage via its REST API — private bucket, signed URLs only."""
 import httpx
+from urllib.parse import quote
 from app.config import settings
 
 _BASE = f"{settings.supabase_url}/storage/v1"
@@ -29,7 +30,7 @@ async def download(key: str) -> bytes:
     return resp.content
 
 
-async def signed_url(key: str, expires_in: int = 3600) -> str:
+async def signed_url(key: str, expires_in: int = 3600, download: str | None = None) -> str:
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{_BASE}/object/sign/{_BUCKET}/{key}",
@@ -40,7 +41,11 @@ async def signed_url(key: str, expires_in: int = 3600) -> str:
         resp.raise_for_status()
     url = resp.json()["signedURL"]
     # Supabase returns a path relative to /storage/v1 — make it absolute for the browser.
-    return url if url.startswith("http") else f"{_BASE}{url}"
+    url = url if url.startswith("http") else f"{_BASE}{url}"
+    if download:
+        # Supabase serves the file as an attachment with this name.
+        url += ("&" if "?" in url else "?") + "download=" + quote(download)
+    return url
 
 
 async def delete(key: str) -> None:

@@ -8,6 +8,7 @@ MODELS = [
     "app.models.event",
     "app.models.file",
     "app.models.template",
+    "app.models.user",
     "aerich.models",
 ]
 

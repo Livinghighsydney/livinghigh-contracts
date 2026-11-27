@@ -8,18 +8,21 @@ class CreateContractRequest(BaseModel):
     template_key: str
     tenant_name: str
     tenant_email: EmailStr
-    property_address: str
+    # Only the details the template prints are required (checked in contract_service).
+    property_address: str = ""
     room_number: str | None = None
-    weekly_rent: Decimal
-    bond_amount: Decimal
-    start_date: date
+    weekly_rent: Decimal | None = None
+    bond_amount: Decimal | None = None
+    start_date: date | None = None
     end_date: date | None = None
-    created_by: str
+    created_by: str | None = None  # ignored — set from the signed-in user
+    # Answers to the template's staff fields: {field id: "text" | number | ["checked", ...]}
+    custom_values: dict[str, str | float | int | list[str] | None] = {}
 
     @field_validator("weekly_rent", "bond_amount")
     @classmethod
-    def must_be_positive(cls, v: Decimal) -> Decimal:
-        if v <= 0:
+    def must_be_positive(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v <= 0:
             raise ValueError("must be positive")
         return v
 
@@ -45,9 +48,9 @@ class ContractSummary(BaseModel):
 class ContractDetail(ContractSummary):
     template_key: str
     template_version: str
-    weekly_rent: Decimal
-    bond_amount: Decimal
-    start_date: date
+    weekly_rent: Decimal | None
+    bond_amount: Decimal | None
+    start_date: date | None
     end_date: date | None
     documenso_envelope_id: str | None
     created_by: str

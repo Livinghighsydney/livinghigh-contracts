@@ -39,3 +39,19 @@ CLAUDE.md
 # OS
 .DS_Store
 Thumbs.db
+
+# Lovable import leftovers
+_lovable/
+ront.zip
+
+# Real signed contract with tenant personal data — never commit (Privacy Act)
+docs/agreements/Lodgers Agreement - Fresh Rooms bank details.pdf
+
+# Screenshots, test downloads and stray files in the repo root (signed PDFs contain tenant personal data)
+/*.png
+/*.jpg
+/*.jpeg
+/*.pdf
+
+# Client agreement PDFs (contain bank details) — keep local only
+docs/agreements/

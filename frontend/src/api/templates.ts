@@ -1,67 +1,117 @@
-const BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+import type { DataKey, FieldType, Template, TemplateField } from "./types";
+import { createCache } from "./store";
+import { API_BASE, http } from "./http";
 
-/** Contract details a data box can show. Filled in automatically when a contract is sent. */
-export type DataKey =
-  | "tenant_name" | "tenant_email" | "property_address" | "room_number"
-  | "weekly_rent" | "bond_amount" | "start_date" | "end_date";
-
-export interface TemplateField {
+interface BackendField {
   id: string;
-  type: "SIGNATURE" | "INITIALS" | "DATE" | "NAME" | "EMAIL" | "TEXT";
+  type: FieldType;
   page: number;
-  positionX: number; // all four are 0–100, percent of the page
+  positionX: number;
   positionY: number;
   width: number;
   height: number;
-  recipient: "tenant";
-  dataKey?: DataKey | null; // set → read-only data box, pre-filled from the contract
   label?: string | null;
-  documensoFieldId?: number | null; // set by the backend on save
+  dataKey?: DataKey | null;
+  [extra: string]: unknown;
 }
 
-export interface Template {
+interface BackendTemplate {
   id: string;
   name: string;
   template_key: string;
   description: string;
   documenso_template_id: string | null;
   pdf_storage_key: string | null;
-  fields_json: TemplateField[];
-  recipient_map: Record<string, number>;
-  is_active: boolean;
-  created_by: string;
+  fields_json: BackendField[];
   created_at: string;
 }
 
-async function handle<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error((err as { detail?: string }).detail ?? `HTTP ${res.status}`);
-  }
-  return res.json() as Promise<T>;
+// The editor shows data boxes with these icons; Documenso stores every data box as a TEXT field.
+const DATA_TYPE: Record<DataKey, FieldType> = {
+  tenant_name: "NAME",
+  tenant_email: "EMAIL",
+  property_address: "TEXT",
+  room_number: "TEXT",
+  weekly_rent: "TEXT",
+  bond_amount: "TEXT",
+  start_date: "DATE",
+  end_date: "DATE",
+};
+const DEFAULT_LABEL: Record<string, string> = {
+  SIGNATURE: "Signature", INITIALS: "Initials", DATE: "Date signed", NAME: "Full name",
+  EMAIL: "Email", TEXT: "Text box", NUMBER: "Number", CHECKBOX: "Checkbox",
+  RADIO: "Radio buttons", DROPDOWN: "Dropdown",
+};
+const DATA_LABEL: Record<DataKey, string> = {
+  tenant_name: "Tenant name", tenant_email: "Tenant email", property_address: "Property address",
+  room_number: "Room number", weekly_rent: "Weekly rent", bond_amount: "Bond amount",
+  start_date: "Start date", end_date: "End date",
+};
+
+function fromBackend(f: BackendField): TemplateField {
+  const { dataKey, label, ...rest } = f;
+  if (dataKey) return { ...rest, type: DATA_TYPE[dataKey], dataKey, label: label || DATA_LABEL[dataKey] };
+  return { ...rest, label: label || DEFAULT_LABEL[f.type] || f.type };
 }
 
-export const templatesApi = {
-  list: () =>
-    fetch(`${BASE}/api/templates/`).then((r) => handle<Template[]>(r)),
+function toBackend(f: TemplateField) {
+  return { ...f, type: f.dataKey ? "TEXT" : f.type, recipient: "tenant" };
+}
 
-  upload: (formData: FormData) =>
-    fetch(`${BASE}/api/templates/`, { method: "POST", body: formData }).then((r) =>
-      handle<Template>(r)
-    ),
+function normalize(t: BackendTemplate): Template {
+  const fields = (t.fields_json ?? []).map(fromBackend);
+  return {
+    id: t.id,
+    name: t.name,
+    template_key: t.template_key,
+    description: t.description ?? "",
+    field_count: fields.length,
+    status: t.documenso_template_id && fields.length > 0 ? "ready" : "needs fields",
+    created_at: t.created_at,
+    ...(t.pdf_storage_key ? { pdfUrl: `${API_BASE}/api/templates/${t.id}/pdf` } : {}),
+    fields,
+  };
+}
 
-  getPdfUrl: (id: string) =>
-    fetch(`${BASE}/api/templates/${id}/pdf-url`).then((r) => handle<{ url: string }>(r)),
+const cache = createCache<Template[]>(
+  async () => (await http.get<BackendTemplate[]>("/api/templates/")).map(normalize),
+  [],
+  120_000,
+);
 
-  saveFields: (id: string, fields: TemplateField[]) =>
-    fetch(`${BASE}/api/templates/${id}/fields`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fields }),
-    }).then((r) => handle<Template>(r)),
+export const templateApi = {
+  list: () => cache.read(),
+  get: (key: string) => cache.read().find((t) => t.id === key || t.template_key === key),
+  isLoaded: cache.isLoaded,
+  reset: cache.reset,
+  loadError: cache.error,
+  refresh: cache.refresh,
 
-  deactivate: (id: string) =>
-    fetch(`${BASE}/api/templates/${id}`, { method: "DELETE" }).then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    }),
+  async upload(
+    data: Omit<Template, "id" | "created_at" | "fields" | "status" | "field_count" | "pdfUrl">,
+    file: File,
+  ) {
+    if (cache.read().some((t) => t.template_key === data.template_key))
+      throw new Error("That template key is already in use. Choose another.");
+    const form = new FormData();
+    form.append("name", data.name);
+    form.append("template_key", data.template_key);
+    form.append("description", data.description);
+    form.append("file", file);
+    const created = await http.postForm<BackendTemplate>("/api/templates/", form);
+    await cache.refresh();
+    return normalize(created);
+  },
+
+  async remove(key: string) {
+    await http.delete(`/api/templates/${key}`);
+    await cache.refresh();
+  },
+
+  async saveFields(key: string, fields: TemplateField[]) {
+    if (!fields.some((f) => f.type === "SIGNATURE" && !f.dataKey))
+      throw new Error("Add a tenant signature before saving.");
+    await http.post(`/api/templates/${key}/fields`, { fields: fields.map(toBackend) });
+    await cache.refresh();
+  },
 };

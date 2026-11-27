@@ -19,11 +19,25 @@ _DOCUMENSO_EMAILS = (
 class DocumensoError(ValueError):
     """Raised when Documenso rejects a request. Message is safe to show staff (no API key)."""
 
+    def __init__(self, message: str, retry_after: int | None = None):
+        super().__init__(message)
+        # Set when Documenso rate-limits us (429): seconds until we may try again.
+        self.retry_after = retry_after
+
 
 async def _call(client: httpx.AsyncClient, method: str, url: str, **kwargs) -> httpx.Response:
     try:
         return await request_with_retry(client, method, url, headers=_HEADERS, **kwargs)
     except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 429:
+            try:
+                wait = int(float(exc.response.headers.get("Retry-After", "60")))
+            except ValueError:
+                wait = 60
+            raise DocumensoError(
+                "Documenso is busy right now (too many requests). Please try again in a few minutes.",
+                retry_after=max(wait, 5),
+            ) from exc
         try:
             detail = exc.response.json().get("message", "")
         except Exception:
@@ -37,6 +51,7 @@ async def use_template(
     prefill_fields: list[dict],
     external_id: str | None = None,
     send_now: bool = True,
+    title: str | None = None,
 ) -> dict:
     body: dict = {
         "envelopeId": template_envelope_id,
@@ -49,9 +64,13 @@ async def use_template(
     # Documenso must never email anyone: our app sends the signing request and the signed
     # copy from Living High's own mailbox. We read each recipient's signingUrl from the response.
     body["override"] = {
+        "dateFormat": "dd/MM/yyyy",          # Australian date format on the signed PDF
+        "timezone": "Australia/Sydney",
         "distributionMethod": "NONE",
         "emailSettings": {k: False for k in _DOCUMENSO_EMAILS},
     }
+    if title:
+        body["override"]["title"] = title[:255]  # what the tenant sees — not our internal template name
 
     # The v2 spec defines this endpoint as multipart/form-data with a JSON "payload" part.
     async with httpx.AsyncClient() as client:
@@ -61,6 +80,14 @@ async def use_template(
             timeout=30,
         )
     return resp.json()
+
+
+async def cancel_envelope(envelope_id: str, reason: str | None = None) -> None:
+    body: dict = {"envelopeId": envelope_id}
+    if reason:
+        body["reason"] = reason
+    async with httpx.AsyncClient() as client:
+        await _call(client, "POST", f"{_BASE}/envelope/cancel", json=body, timeout=30)
 
 
 async def get_envelope(envelope_id: str) -> dict:
@@ -126,6 +153,17 @@ async def download_envelope_item(item_id: str, version: str = "signed") -> bytes
         resp = await _call(
             client, "GET", f"{_BASE}/envelope/item/{item_id}/download",
             params={"version": version},
+            timeout=60,
+            follow_redirects=True,
+        )
+    return resp.content
+
+
+async def download_audit_log(envelope_id: str) -> bytes:
+    """Documenso's own Audit Log PDF: every event with user, IP address, device and time."""
+    async with httpx.AsyncClient() as client:
+        resp = await _call(
+            client, "GET", f"{_BASE}/envelope/{envelope_id}/audit-log/download",
             timeout=60,
             follow_redirects=True,
         )

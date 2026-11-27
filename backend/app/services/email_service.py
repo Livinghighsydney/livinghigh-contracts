@@ -128,7 +128,7 @@ async def send_signing_request(
     subject = subject or f"Please sign: {document_title}"
     intro = message or (
         f"Hi {_first_name(to_name)},\n\n"
-        f"Your {document_title} is ready. Please review and sign it using the button below."
+        "Your Living High agreement is ready. Please review and sign it using the button below."
     )
 
     msg = _new_message(to_email, to_name, subject)
@@ -142,7 +142,7 @@ async def send_signing_request(
         f'border-radius:6px;font-weight:bold;display:inline-block;">Review and sign</a></p>'
         f'<p style="margin:0;font-size:13px;color:#6b7280;">This link is personal to you. Please don\'t forward it.</p>'
     )
-    msg.add_alternative(_layout(document_title, _paragraphs(intro) + button), subtype="html")
+    msg.add_alternative(_layout("Your agreement is ready to sign", _paragraphs(intro) + button), subtype="html")
     await _send(msg)
 
 
@@ -158,10 +158,29 @@ async def send_completed_copy(
     msg = _new_message(to_email, to_name, f"Signed copy: {document_title}")
     text = (
         f"Hi {_first_name(to_name)},\n\n"
-        f"Thanks for signing. Your signed {document_title} is attached for your records, "
+        "Thanks for signing. Your signed Living High agreement is attached for your records, "
         f"including the signing certificate.\n\nPlease keep this copy somewhere safe."
     )
     msg.set_content(f"{text}\n\n— {settings.email_from_name}")
     msg.add_alternative(_layout("Your signed agreement", _paragraphs(text)), subtype="html")
     msg.add_attachment(signed_pdf, maintype="application", subtype="pdf", filename=filename)
+    await _send(msg)
+
+
+async def send_team_invite(*, to_email: str, inviter_name: str, role_label: str, link: str, days: int) -> None:
+    """Invite a staff member to the Living High contracts workspace."""
+    ensure_configured()
+    msg = _new_message(to_email, "", f"{inviter_name} invited you to Living High Contracts")
+    text = (
+        f"Hi,\n\n{inviter_name} has invited you to join the Living High contracts workspace "
+        f"as a {role_label}.\n\nAccept the invite to set your password. The link works for {days} days."
+    )
+    msg.set_content(f"{text}\n\nAccept the invite:\n{link}\n\n— {settings.email_from_name}")
+    button = (
+        f'<p style="margin:24px 0;"><a href="{html.escape(link, quote=True)}" '
+        f'style="background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 24px;'
+        f'border-radius:6px;font-weight:bold;display:inline-block;">Accept invite</a></p>'
+        f'<p style="margin:0;font-size:13px;color:#6b7280;">If you weren\'t expecting this, you can ignore this email.</p>'
+    )
+    msg.add_alternative(_layout("You're invited", _paragraphs(text) + button), subtype="html")
     await _send(msg)
